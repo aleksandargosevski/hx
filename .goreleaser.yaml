@@ -1,0 +1,72 @@
+version: 2
+
+project_name: hx
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: .
+    binary: hx
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - repository:
+      owner: aleksandargosevski
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/aleksandargosevski/hx"
+    description: "A fast shell history manager with fuzzy search, templates, and analytics"
+    license: "MIT"
+    install: |
+      bin.install "hx"
+    test: |
+      system "#{bin}/hx", "version"
+    extra_install: |
+      generate_completions_from_executable(bin/"hx", "completion")
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^style:"
+      - "^chore:"
+      - "^test:"
+
+release:
+  github:
+    owner: aleksandargosevski
+    name: hx
+  header: |
+    ## Installation
+
+    **Homebrew:**
+    ```bash
+    brew install aleksandargosevski/tap/hx
+    ```
+
+    **Script:**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/aleksandargosevski/hx/main/install.sh | bash
+    ```
+
+    **Manual:** Download the archive for your platform below, extract, and move `hx` to your PATH.
