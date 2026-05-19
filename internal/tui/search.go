@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,8 +39,11 @@ type SearchModel struct {
 	matchIdxs   [][]int // Matched character indices per result
 	successOnly bool    // Filter to exit code 0 only
 	dirFilter   bool    // Filter to current directory only
+	frecencySort bool   // Sort by frecency instead of recency
 	cwd         string  // Current working directory (passed from shell)
-	allEntries  []db.HistoryEntry // Full entries before dir filter
+	allEntries      []db.HistoryEntry // Full entries before dir filter
+	recentEntries   []db.HistoryEntry // Time-sorted entries (default)
+	frecencyEntries []db.HistoryEntry // Frecency-sorted entries (toggle)
 
 	// Template search state
 	templateQuery    string
@@ -92,14 +96,16 @@ func (s templateSource) String(i int) string {
 func (s templateSource) Len() int { return len(s.templates) }
 
 // NewSearchModel creates a new search model.
-func NewSearchModel(entries []db.HistoryEntry, templates []db.Template, store *db.Store, initialQuery string, cwd string) *SearchModel {
+func NewSearchModel(entries []db.HistoryEntry, frecencyEntries []db.HistoryEntry, templates []db.Template, store *db.Store, initialQuery string, cwd string) *SearchModel {
 	m := &SearchModel{
-		entries:    entries,
-		allEntries: entries,
-		templates:  templates,
-		store:      store,
-		query:      initialQuery,
-		cwd:        cwd,
+		entries:         entries,
+		allEntries:      entries,
+		recentEntries:   entries,
+		frecencyEntries: frecencyEntries,
+		templates:       templates,
+		store:           store,
+		query:           initialQuery,
+		cwd:             cwd,
 	}
 	m.filterHistory()
 	m.filterTemplates()
@@ -239,20 +245,16 @@ func (m *SearchModel) updateSearch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.filterHistory()
 		m.cursor = 0
 
+	case "ctrl+r":
+		m.frecencySort = !m.frecencySort
+		m.applyBaseEntries()
+		m.filterHistory()
+		m.cursor = 0
+
 	case "ctrl+g":
 		if m.cwd != "" {
 			m.dirFilter = !m.dirFilter
-			if m.dirFilter {
-				var dirEntries []db.HistoryEntry
-				for _, e := range m.allEntries {
-					if e.Directory == m.cwd {
-						dirEntries = append(dirEntries, e)
-					}
-				}
-				m.entries = dirEntries
-			} else {
-				m.entries = m.allEntries
-			}
+			m.applyBaseEntries()
 			m.filterHistory()
 			m.cursor = 0
 		}
@@ -297,6 +299,9 @@ func (m *SearchModel) viewSearch(s *strings.Builder) {
 
 	// Status bar
 	statusText := fmt.Sprintf("  %d/%d", len(m.filtered), len(m.entries))
+	if m.frecencySort {
+		statusText += " (frecency)"
+	}
 	if m.successOnly {
 		statusText += " (exit:0)"
 	}
@@ -371,6 +376,15 @@ func (m *SearchModel) filterHistory() {
 		source := historySource{entries: m.entries}
 		results := fuzzy.FindFrom(m.query, source)
 
+		// Re-sort: fuzzy score as primary, frecency rank (original index) as tiebreaker.
+		// Lower index = higher frecency, so when scores are equal the more frequent/recent command wins.
+		sort.SliceStable(results, func(i, j int) bool {
+			if results[i].Score != results[j].Score {
+				return results[i].Score > results[j].Score
+			}
+			return results[i].Index < results[j].Index
+		})
+
 		m.filtered = make([]db.HistoryEntry, len(results))
 		m.matchIdxs = make([][]int, len(results))
 		m.matches = results
@@ -394,6 +408,28 @@ func (m *SearchModel) filterHistory() {
 		}
 		m.filtered = filteredEntries
 		m.matchIdxs = filteredIdxs
+	}
+}
+
+// applyBaseEntries sets m.entries and m.allEntries based on the current sort mode
+// and directory filter, keeping both toggles composable.
+func (m *SearchModel) applyBaseEntries() {
+	base := m.recentEntries
+	if m.frecencySort {
+		base = m.frecencyEntries
+	}
+	m.allEntries = base
+
+	if m.dirFilter && m.cwd != "" {
+		var dirEntries []db.HistoryEntry
+		for _, e := range base {
+			if e.Directory == m.cwd {
+				dirEntries = append(dirEntries, e)
+			}
+		}
+		m.entries = dirEntries
+	} else {
+		m.entries = base
 	}
 }
 
@@ -471,10 +507,15 @@ func (m *SearchModel) renderHelp() string {
 	if m.dirFilter {
 		dirDesc = "all"
 	}
+	sortDesc := "freq"
+	if m.frecencySort {
+		sortDesc = "recent"
+	}
 	keys := []struct{ key, desc string }{
 		{"^d", "del"},
 		{"^z", "undo"},
 		{"^e", "edit"},
+		{"^r", sortDesc},
 		{"^f", filterDesc},
 		{"^g", dirDesc},
 		{"^t", "tmpl"},

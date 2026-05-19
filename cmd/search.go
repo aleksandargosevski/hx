@@ -25,9 +25,14 @@ var searchCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		entries, err := store.ListHistoryFrecency(time.Now().Unix(), 10000)
+		entries, err := store.ListHistory(10000)
 		if err != nil {
 			return fmt.Errorf("failed to load history: %w", err)
+		}
+
+		frecencyEntries, err := store.ListHistoryFrecency(time.Now().Unix(), 10000)
+		if err != nil {
+			return fmt.Errorf("failed to load frecency history: %w", err)
 		}
 
 		// Load templates from DB
@@ -53,7 +58,7 @@ var searchCmd = &cobra.Command{
 			templates, _ = store.ListTemplates()
 		}
 
-		model := tui.NewSearchModel(entries, templates, store, searchQuery, searchCwd)
+		model := tui.NewSearchModel(entries, frecencyEntries, templates, store, searchQuery, searchCwd)
 
 		// Run TUI on /dev/tty so stdout can be captured by the zsh widget
 		ttyFile, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)

@@ -138,7 +138,7 @@ func (s *Store) ListHistoryFrecency(now int64, limit int) ([]HistoryEntry, error
 		   WHERE deleted = 0
 		   GROUP BY command
 		 ) stats ON h.id = stats.max_id
-		 ORDER BY stats.frequency * (1.0 / (1.0 + (CAST(? AS REAL) - stats.last_used) / 86400.0)) DESC
+		 ORDER BY stats.frequency * (1.0 / (1.0 + (CAST(? AS REAL) - stats.last_used) / 86400.0)) DESC, stats.last_used DESC
 		 LIMIT ?`,
 		now, limit,
 	)

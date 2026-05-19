@@ -6,7 +6,7 @@ A fast shell history manager that replaces `Ctrl+R` with a fuzzy-search TUI back
 
 - Single binary, no dependencies
 - Fuzzy search across your full history (100k+ entries in milliseconds)
-- **Frecency ranking** -- results ordered by frequency + recency, not just time
+- **Recency-first ranking** -- results ordered by most recent, with optional frecency toggle (`Ctrl+R`)
 - **Directory filter** -- instantly scope results to the current working directory
 - **Secrets filter** -- automatically skips recording commands containing API keys, tokens, and passwords
 - Edit or delete history entries in-place
@@ -80,7 +80,7 @@ Press `Ctrl+R` in your terminal (or run `hx` / `hx search` directly). A fuzzy fi
 
 If you've already started typing a command, pressing `Ctrl+R` pre-populates the search with what you've typed. For example, type `docker` then hit `Ctrl+R` and the search opens pre-filtered to docker commands.
 
-Results are ranked by **frecency** -- a combination of how often and how recently you've used each command. Commands you use frequently and recently appear first.
+Results are ranked by **most recent first** by default. Press `Ctrl+R` to toggle **frecency** ranking -- a combination of how often and how recently you've used each command.
 
 The selected command is placed on your shell prompt, ready to execute or edit.
 
@@ -90,7 +90,7 @@ The selected command is placed on your shell prompt, ready to execute or edit.
 > docker compose up -d                                   3h ago  ~/proj
   docker compose logs -f api                             3h ago  ~/proj
 
-  4/2847                   ^d:del  ^e:edit  ^f:ok  ^g:cwd  ^t:tmpl  tab:templates
+  4/2847           ^d:del  ^e:edit  ^r:freq  ^f:ok  ^g:cwd  ^t:tmpl  tab:templates
 > docker_
 ```
 
@@ -105,6 +105,7 @@ The selected command is placed on your shell prompt, ready to execute or edit.
 | `Ctrl+D`            | Delete selected entry                              |
 | `Ctrl+Z`            | Undo last delete                                   |
 | `Ctrl+E`            | Edit selected entry inline                         |
+| `Ctrl+R`            | Toggle sort: recent (default) / frecency           |
 | `Ctrl+F`            | Toggle filter: all / successful only (exit code 0) |
 | `Ctrl+G`            | Toggle filter: all / current directory only        |
 | `Ctrl+T`            | Create template from selected entry                |
@@ -239,7 +240,7 @@ Sections include:
 - **Storage:** All history and templates are stored in a SQLite database at `~/.config/hx/hx.db` with WAL mode enabled for fast concurrent reads.
 - **Recording:** The zsh `preexec` hook fires `hx record` as a background job (`&!`) on every command, so it never slows down your shell. Each record includes the command text, working directory, timestamp, exit code, and duration.
 - **Secrets filter:** Before recording, commands are checked against patterns for common secrets (AWS keys, GitHub PATs, Slack/Stripe tokens, `--password`, `--token`, `API_KEY=`, etc.). Matching commands are silently skipped and never written to the database.
-- **Frecency ranking:** Results are scored by `frequency * (1 / (1 + days_since_last_use))`. A command used 10 times yesterday scores higher than one used twice today. When you type a search query, the fuzzy matching algorithm takes over for relevance-based ordering.
+- **Ranking:** By default, results are sorted by most recent first. Press `Ctrl+R` to toggle frecency ranking, which scores results by `frequency * (1 / (1 + days_since_last_use))` -- a command used 10 times yesterday scores higher than one used twice today. When you type a search query, fuzzy matching determines relevance, with the active sort order used as a tiebreaker.
 - **Search:** On launch, hx loads history into memory and uses [sahilm/fuzzy](https://github.com/sahilm/fuzzy) (the same algorithm as Sublime Text / VS Code) for sub-millisecond fuzzy matching.
 - **Ctrl+R integration:** The TUI renders on `/dev/tty` while the selected command is printed to stdout, which the zsh widget captures and places into your shell's edit buffer. If you had text on the command line before pressing `Ctrl+R`, it becomes the initial search query.
 - **Directory filter:** Press `Ctrl+G` to scope results to commands that were run in your current working directory. Useful for project-specific recall.
